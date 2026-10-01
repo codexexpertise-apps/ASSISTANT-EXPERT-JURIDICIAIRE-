@@ -43,7 +43,7 @@ function indexUpsert(s){
   idx.currentId=d.id; idx.dossiers.sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||''))); saveIndex(idx); currentId=d.id;
 }
 function loadDossier(id){
-  try{const v=JSON.parse(localStorage.getItem(dossierKey(id)));if(v){v.version=2.5;normalizeMissionInterventions(v);normalizePhotoPlacements(v);if(!Array.isArray(v.contradictoire))v.contradictoire=[];if(typeof v.dossier.missionsValidated!=='boolean')v.dossier.missionsValidated=false;return v;}}catch{}
+  try{const v=JSON.parse(localStorage.getItem(dossierKey(id)));if(v){v.version="2.5.1";normalizeMissionInterventions(v);normalizePhotoPlacements(v);normalizeDossierMeta(v);if(!Array.isArray(v.contradictoire))v.contradictoire=[];if(typeof v.dossier.missionsValidated!=='boolean')v.dossier.missionsValidated=false;return v;}}catch{}
   return null;
 }
 function migrateLegacy(){
@@ -55,9 +55,9 @@ function migrateLegacy(){
 }
 function blankState(){
   return {
-    version:2.5,
-    dossier:{id:uid(),title:"", ordonnanceName:"", ordonnanceFileId:"", createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()},
-    resume:"Une ordonnance d’expertise a été importée. Cette zone est destinée à consigner un résumé factuel et neutre des éléments utiles à la conduite de la mission. Vérifier systématiquement le texte de l’ordonnance avant toute utilisation.",
+    version:"2.5.1",
+    dossier:{id:uid(),title:"", ordonnanceName:"", ordonnanceFileId:"", reportMeta:blankReportMeta(), extractedFacts:[], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()},
+    resume:"",
     vigilances:"• Vérifier les dates, délais et point de départ des échéances.\n• Vérifier exactement les missions de l’expert figurant au dispositif.\n• Identifier les parties, pièces annoncées et opérations à organiser.\n• Signaler ici toute incohérence ou information nécessitant une vérification.",
     missions:DEFAULT_MISSIONS.map((text,i)=>({id:uid(),order:i+1,text,response:"",status:"À rédiger",intervention:blankIntervention()})),
     tasks:DEFAULT_TASKS.map((x,i)=>({id:uid(),title:x[0],type:x[1],source:x[2],due:"",confirmed:false,done:false})),
@@ -67,6 +67,8 @@ function blankState(){
     annexMeta:[]
   };
 }
+function blankReportMeta(){return {juridiction:"",rg:"",affaire:"",demandeurs:"",defendeurs:"",expert:"",destinataires:"",reportType:"RAPPORT DÉFINITIF",reportDate:""};}
+function normalizeDossierMeta(s){if(!s?.dossier)return;s.dossier.reportMeta={...blankReportMeta(),...(s.dossier.reportMeta||{})};if(!Array.isArray(s.dossier.extractedFacts))s.dossier.extractedFacts=[];}
 function blankIntervention(){return {role:"Expert",identity:"",specialty:"",object:"",status:"Non requis",email:"",documents:[]};}
 function normalizeMissionInterventions(s){
   if(!s||!Array.isArray(s.missions))return;
@@ -79,7 +81,7 @@ function normalizePhotoPlacements(s){
 function persist(reason="Modification"){
   if(!state?.dossier?.id)return false;
   try{
-    state.version=2.5; state.dossier.updatedAt=new Date().toISOString();
+    state.version="2.5.1"; state.dossier.updatedAt=new Date().toISOString();
     localStorage.setItem(dossierKey(state.dossier.id),JSON.stringify(state)); indexUpsert(state);
     setSaveState("Sauvegardé"); renderDossierList();
     clearTimeout(saveTimer); saveTimer=setTimeout(()=>setSaveState("Sauvegarde locale active"),1200); return true;
@@ -236,17 +238,20 @@ function extractVigilances(pages){
   addSource('Pièces à joindre au rapport', nearbyExtract(text,/(?:joindra\s+au\s+rapport|joindre\s+au\s+rapport)[\s\S]{0,850}/i,40),'Préparer la traçabilité des pièces, convocations, présences et réunions demandées par l’ordonnance.');
   return items;
 }
-function extractCaseSummary(pages){
-  const text=pages.map(p=>p.text).join('\n');
-  const court=(text.match(/TRIBUNAL\s+JUDICIAIRE\s+DE\s+[A-ZÀ-ÖØ-Ý -]+/i)||[])[0]?.replace(/\s+/g,' ').trim();
-  const date=(text.match(/ORDONNANCE[\s\S]{0,120}?(?:DU\s+)?(\d{1,2}\s+(?:JANVIER|F[ÉE]VRIER|MARS|AVRIL|MAI|JUIN|JUILLET|AO[ÛU]T|SEPTEMBRE|OCTOBRE|NOVEMBRE|D[ÉE]CEMBRE)\s+20\d{2})/i)||[])[1];
-  let r="Ordonnance d’expertise importée"; if(court)r+=` — ${court}`; if(date)r+=` — ${date}`; return r+". Le contenu ci-dessous doit être rédigé et validé par l’expert à partir de l’ordonnance originale.";
+function extractIdentityFacts(pages){
+  const text=pages.map(p=>p.text).join('\n'), facts=[];
+  const add=(label,value,page,kind='information')=>{if(value)facts.push({label,value:cleanPdfText(value).replace(/\n/g,' '),page:page||findPageForSnippet(pages,value),kind});};
+  const court=(text.match(/TRIBUNAL\s+JUDICIAIRE\s+DE\s+[A-ZÀ-ÖØ-Ý -]+/i)||[])[0];
+  const date=(text.match(/ORDONNANCE[\s\S]{0,160}?(?:DU\s+)?(\d{1,2}\s+(?:JANVIER|F[ÉE]VRIER|MARS|AVRIL|MAI|JUIN|JUILLET|AO[ÛU]T|SEPTEMBRE|OCTOBRE|NOVEMBRE|D[ÉE]CEMBRE)\s+20\d{2})/i)||[])[1];
+  add('Juridiction',court,1);add('Date de l’ordonnance',date,findPageForSnippet(pages,date||''));
+  return facts;
 }
 function buildAnalysis(extracted){
   const mx=extractMissionItemsFromPages(extracted.pages), vig=extractVigilances(extracted.pages);
-  const vigilances=vig.length?vig.map(v=>`• ${v.title}${v.page?` (p. ${v.page})`:''} : ${v.source}\n  → ${v.comment}`).join('\n'):'• Aucun jalon documentaire n’a été reconnu avec une fiabilité suffisante : vérifier manuellement le dispositif.';
-  const warning=mx.complete?'':'\n• ⚠ EXTRACTION DES MISSIONS POTENTIELLEMENT INCOMPLÈTE : comparer impérativement la liste au dispositif reproduit ci-dessous.';
-  return {resume:extractCaseSummary(extracted.pages),missions:mx.items.map(m=>m.text),missionSources:mx.items.map(m=>({text:m.text,page:m.page})),missionCheck:{complete:mx.complete,candidateCount:mx.candidateCount,extractedCount:mx.items.length,reason:mx.reason},dispositifVerbatim:mx.zone,vigilances:vigilances+warning+'\n• Tout préremplissage doit être contrôlé sur le PDF original avant validation.',pages:extracted.pageCount,chars:extracted.chars,mode:extracted.mode};
+  const facts=[...extractIdentityFacts(extracted.pages),...vig.map(v=>({label:v.title,value:v.source,page:v.page,kind:'ordonnance',control:v.comment}))];
+  const warning=mx.complete?'':'Extraction des missions potentiellement incomplète : comparer impérativement la liste au dispositif reproduit dans l’onglet Mission.';
+  const controls=[...vig.map(v=>v.comment),warning,'Tout préremplissage doit être contrôlé sur le PDF original avant validation.'].filter(Boolean);
+  return {facts,controls,missions:mx.items.map(m=>m.text),missionSources:mx.items.map(m=>({text:m.text,page:m.page})),missionCheck:{complete:mx.complete,candidateCount:mx.candidateCount,extractedCount:mx.items.length,reason:mx.reason},dispositifVerbatim:mx.zone,pages:extracted.pageCount,chars:extracted.chars,mode:extracted.mode};
 }
 async function prepareOrdonnanceFromPdf(file,onProgress){
   const extracted=await extractPdfDocument(file,onProgress);
@@ -291,7 +296,7 @@ async function exportFullBackup(){
   const password=prompt('Mot de passe de la sauvegarde chiffrée (12 caractères minimum).\n\nConserve-le séparément : il est impossible de restaurer la sauvegarde sans lui.');
   if(password===null)return;if(password.length<12)throw new Error('Le mot de passe doit contenir au moins 12 caractères.');
   const idx=loadIndex(),dossiers=idx.dossiers.map(d=>loadDossier(d.id)).filter(Boolean),rows=await dbAll(),files=[];for(const r of rows)files.push(await serializeDbRecord(r));
-  const payload={format:BACKUP_FORMAT,backupVersion:BACKUP_VERSION,appVersion:'2.5',createdAt:new Date().toISOString(),index:idx,dossiers,files};
+  const payload={format:BACKUP_FORMAT,backupVersion:BACKUP_VERSION,appVersion:'2.5.1',createdAt:new Date().toISOString(),index:idx,dossiers,files};
   const envelope=await encryptBackupPayload(payload,password),stamp=new Date().toISOString().replace(/[:.]/g,'-');
   download(`AEJ-sauvegarde-chiffree-${stamp}.aej-backup`,JSON.stringify(envelope),'application/octet-stream');
   localStorage.setItem(LAST_BACKUP_KEY,payload.createdAt);updateBackupState();
@@ -347,10 +352,10 @@ analyseBtn.onclick=async()=>{
   state=blankState(); currentId=state.dossier.id; state.dossier.title=selectedFile.name.replace(/\.pdf$/i,""); state.dossier.ordonnanceName=selectedFile.name;
   try{
     const ordId='ordonnance-'+uid(); state.dossier.ordonnanceFileId=ordId; await dbPut({id:ordId,kind:"ordonnance",name:selectedFile.name,type:selectedFile.type,blob:selectedFile,updatedAt:new Date().toISOString()});
-    const a=await prepareOrdonnanceFromPdf(selectedFile,msg=>status(msg)); state.resume=a.resume;state.vigilances=a.vigilances;state.dossier.dispositifVerbatim=a.dispositifVerbatim||"";state.dossier.missionCheck=a.missionCheck||null;state.dossier.missionsValidated=false;state.dossier.missionsValidatedAt=null;
+    const a=await prepareOrdonnanceFromPdf(selectedFile,msg=>status(msg)); state.resume="";state.vigilances=(a.controls||[]).map(x=>`• ${x}`).join("\n");state.dossier.extractedFacts=a.facts||[];normalizeDossierMeta(state);const jf=(a.facts||[]).find(x=>x.label==="Juridiction");if(jf&&!state.dossier.reportMeta.juridiction)state.dossier.reportMeta.juridiction=jf.value;state.dossier.dispositifVerbatim=a.dispositifVerbatim||"";state.dossier.missionCheck=a.missionCheck||null;state.dossier.missionsValidated=false;state.dossier.missionsValidatedAt=null;
     state.missions=(a.missions.length?a.missions:["Missions de l’expert non extraites automatiquement — vérifier et reprendre le dispositif de l’ordonnance."]).map((text,i)=>({id:uid(),order:i+1,text,sourcePage:a.missionSources?.[i]?.page||null,response:"",status:"À vérifier",intervention:blankIntervention()}));
     state.dossier.analysis={mode:a.mode,pages:a.pages,chars:a.chars,analysedAt:new Date().toISOString()};persist("Lecture locale de l’ordonnance");openDossier();
-  }catch(e){console.error(e);state.resume="L’ordonnance a bien été importée, mais son texte n’a pas pu être extrait avec une fiabilité suffisante. Le résumé doit être complété manuellement à partir du PDF original.";state.vigilances=`• Lecture automatique incomplète : ${e.message||"cause indéterminée"}\n• Vérifier manuellement les dates, délais, consignation, missions de l’expert et modalités du contradictoire.\n• Le PDF original demeure la référence.`;state.missions=[{id:uid(),order:1,text:"Missions de l’expert à reprendre manuellement depuis le dispositif de l’ordonnance.",response:"",status:"À vérifier",intervention:blankIntervention()}];persist("Import PDF sans extraction suffisante");openDossier();}
+  }catch(e){console.error(e);state.resume="";state.dossier.extractedFacts=[];state.vigilances=`• Lecture automatique incomplète : ${e.message||"cause indéterminée"}\n• Vérifier manuellement les dates, délais, consignation, missions de l’expert et modalités du contradictoire.\n• Le PDF original demeure la référence.`;state.missions=[{id:uid(),order:1,text:"Missions de l’expert à reprendre manuellement depuis le dispositif de l’ordonnance.",response:"",status:"À vérifier",intervention:blankIntervention()}];persist("Import PDF sans extraction suffisante");openDossier();}
   finally{analyseBtn.disabled=false;analyseBtn.textContent="Créer le dossier et analyser";}
 };
 function openDossierById(id){const s=loadDossier(id);if(!s)return status("Dossier local introuvable.");state=s;currentId=id;openDossier();}
@@ -372,9 +377,9 @@ document.querySelectorAll("[data-tab]").forEach(btn=>btn.onclick=()=>{
   if(btn.dataset.tab==="photos")renderPhotos();
 });
 
-// Résumé
-$("resumeText").addEventListener("input",e=>{state.resume=e.target.value;touch();});
-$("vigilancesText").addEventListener("input",e=>{state.vigilances=e.target.value;touch();});
+// Synthèse structurée de l’ordonnance
+function bindReportMeta(){document.querySelectorAll('[data-report-meta]').forEach(el=>{const save=()=>{normalizeDossierMeta(state);state.dossier.reportMeta[el.dataset.reportMeta]=el.value;touch();renderPreview();};el.oninput=save;el.onchange=save;});}
+
 
 // Missions de l’expert + rédaction + intervenants
 $("addMission").onclick=()=>{state.dossier.missionsValidated=false;state.dossier.missionsValidatedAt=null;state.missions.push({id:uid(),order:state.missions.length+1,text:"Nouvelle mission de l’expert à reformuler.",response:"",status:"À rédiger",intervention:blankIntervention()});persist();renderMission();renderResponses();};
@@ -577,20 +582,12 @@ async function exportReportDocx(){
   const btn=$("wordExportBtn"),old=btn.textContent;btn.disabled=true;btn.textContent='Génération Word…';
   try{
     persist('Export Word');const {byPlacement,images,rels}=await collectDocxPhotos();let body='';
-    body+=wParagraph('DOCUMENT DE TRAVAIL — V2.5',{align:'center',size:18,color:'B08A3E',after:600});
-    body+=wParagraph('RAPPORT D’EXPERTISE JUDICIAIRE',{align:'center',bold:true,size:34,color:'173A59',after:260});
+    normalizeDossierMeta(state);const meta=state.dossier.reportMeta;body+=wParagraph('DOCUMENT DE TRAVAIL — V2.5.1',{align:'center',size:18,color:'B08A3E',after:600});
+    body+=wParagraph(meta.reportType||'RAPPORT DÉFINITIF',{align:'center',bold:true,size:34,color:'173A59',after:260});
     body+=wParagraph(state.dossier.title||'Dossier d’expertise',{align:'center',size:26,after:1000});
-    body+=wParagraph('Sommaire',{bold:true,size:28,color:'173A59',after:220});
-    body+=wParagraph('Cadre de la mission',{after:120})+wParagraph('1. Registre du contradictoire',{after:120})+wParagraph('2. Déroulement des opérations',{after:120})+wParagraph('3. Réponses aux missions de l’expert',{after:120})+wParagraph('4. Annexes et pièces',{after:120});
-    body+=wPageBreak();
-    body+=wParagraph('Cadre de la mission',{style:'Heading1',after:180})+wParagraph(state.resume||'',{after:180})+docxPhotoBlocks(byPlacement.cadre);
-    body+=wParagraph('1. Registre du contradictoire',{style:'Heading1',after:180});const ce=state.contradictoire||[];if(!ce.length)body+=wParagraph('Aucun événement contradictoire enregistré.',{italic:true});else ce.forEach(e=>body+=wBullet(`${e.date||'Date à définir'} — ${e.type||''}${e.destinataires?' — '+e.destinataires:''}${e.mode?' — '+e.mode:''}${e.details?'\n'+e.details:''}${e.response?'\nSuite / réponse : '+e.response:''}`));
-    body+=wParagraph('2. Déroulement des opérations',{style:'Heading1',after:180});
-    const contrad=(state.contradictoire||[]).map(e=>`<li><b>${escapeHtml(e.date||'Date à définir')}</b> — ${escapeHtml(e.type||'')}${e.destinataires?` — ${escapeHtml(e.destinataires)}`:''}${e.mode?` — ${escapeHtml(e.mode)}`:''}${e.details?`<br><span>${nl2br(e.details)}</span>`:''}${e.response?`<br><span><b>Suite / réponse :</b> ${nl2br(e.response)}</span>`:''}</li>`).join('')||'<li><em>Aucun événement contradictoire enregistré.</em></li>';
-  const ops=[...state.operations].sort((a,b)=>(a.date||'').localeCompare(b.date||''));if(!ops.length)body+=wParagraph('Aucune opération enregistrée.',{italic:true});else for(const o of ops)body+=wBullet(`${o.date||'Date à définir'} — ${o.type||''} — ${o.title||''}${o.notes?`\n${o.notes}`:''}`);body+=docxPhotoBlocks(byPlacement.operations);
-    body+=wParagraph('3. Réponses aux missions de l’expert',{style:'Heading1',after:180});
+    body+=wParagraph('Sommaire',{bold:true,size:28,color:'173A59',after:220});body+=wParagraph('1. Les parties',{after:120})+wParagraph('2. Mission de l’expert',{after:120})+wParagraph('3. Historique des opérations',{after:120})+wParagraph('4. Développements – chefs de mission',{after:120})+wParagraph('Annexes / pièces / dires',{after:120});body+=wPageBreak();body+=wParagraph('1. Les parties',{style:'Heading1',after:180})+wParagraph('Demandeur(s) :\n'+(meta.demandeurs||'À compléter.'),{after:120})+wParagraph('Défendeur(s) :\n'+(meta.defendeurs||'À compléter.'),{after:180});body+=wParagraph('2. Mission de l’expert',{style:'Heading1',after:180});state.missions.forEach((m,i)=>body+=wParagraph(`${i+1}. ${m.text||''}${m.sourcePage?' (ordonnance p.'+m.sourcePage+')':''}`,{after:120}));body+=wParagraph('3. Historique des opérations',{style:'Heading1',after:180});const hist=reportHistoryItems();if(!hist.length)body+=wParagraph('Aucune opération enregistrée.',{italic:true});else hist.forEach(x=>body+=wBullet(`${x.date||'Date à définir'} — ${x.text}`));body+=docxPhotoBlocks(byPlacement.operations);body+=wParagraph('4. Développements – chefs de mission',{style:'Heading1',after:180});
     state.missions.forEach((m,i)=>{body+=wParagraph(`${i+1}. ${m.text||''}`,{style:'Heading2',after:120});const iv=m.intervention||blankIntervention();if(iv.role!=='Expert'||iv.identity||iv.object)body+=wParagraph(`Concours / intervenant : ${iv.role||'Expert'}${iv.identity?' — '+iv.identity:''}${iv.specialty?' ('+iv.specialty+')':''}${iv.object?'\n'+iv.object:''}`,{italic:true,after:100});body+=wParagraph(m.response||'Réponse à rédiger.',{italic:!m.response,after:180})+docxPhotoBlocks(byPlacement[`mission:${m.id}`]);});
-    body+=wParagraph('4. Annexes et pièces',{style:'Heading1',after:180});if(!state.annexMeta.length)body+=wParagraph('Aucune annexe.',{italic:true});else state.annexMeta.forEach((a,i)=>body+=wBullet(`Annexe A${String(i+1).padStart(2,'0')} — ${a.name||''}${a.description?' — '+a.description:''}`));body+=docxPhotoBlocks(byPlacement.annexes);
+    body+=wParagraph('Annexes / pièces / dires',{style:'Heading1',after:180});if(!state.annexMeta.length)body+=wParagraph('Aucune annexe.',{italic:true});else state.annexMeta.forEach((a,i)=>body+=wBullet(`Annexe A${String(i+1).padStart(2,'0')} — ${a.name||''}${a.description?' — '+a.description:''}`));body+=docxPhotoBlocks(byPlacement.annexes);
     body+=wParagraph('Aperçu de préparation uniquement. La forme, les visas, le contradictoire, la discussion technique, les dires et les conclusions devront être finalisés par l’expert.',{italic:true,size:18,color:'665F54',after:0});
     const documentXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>`;
     const styles=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="360" w:after="180"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:color w:val="173A59"/><w:sz w:val="30"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:b/><w:color w:val="173A59"/><w:sz w:val="24"/></w:rPr></w:style></w:styles>`;
@@ -621,30 +618,26 @@ function previewPhotosHtml(items=[]){
   if(!items.length)return "";
   return `<div class="report-photo-group">${items.map(({p,src})=>`<figure class="report-photo">${src?`<img src="${src}" alt="Photo ${p.number}">`:'<div class="report-photo-missing">Photo indisponible</div>'}<figcaption><strong>Photo ${p.number}</strong>${p.caption?` — ${escapeHtml(p.caption)}`:p.name?` — ${escapeHtml(p.name)}`:""}</figcaption></figure>`).join("")}</div>`;
 }
+function reportHistoryItems(){
+  const rows=[];
+  for(const e of (state.contradictoire||[]))rows.push({date:e.date||'',text:`${e.type||'Événement'}${e.destinataires?' — '+e.destinataires:''}${e.mode?' — '+e.mode:''}${e.details?' — '+e.details:''}${e.response?' — Suite / réponse : '+e.response:''}`});
+  for(const o of (state.operations||[]))rows.push({date:o.date||'',text:`${o.type||'Opération'} — ${o.title||''}${o.notes?' — '+o.notes:''}`});
+  return rows.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+}
+function reportPartiesHtml(){normalizeDossierMeta(state);const m=state.dossier.reportMeta;return `<p><strong>Demandeur(s)</strong><br>${m.demandeurs?nl2br(m.demandeurs):'<em>À compléter.</em>'}</p><p><strong>Défendeur(s)</strong><br>${m.defendeurs?nl2br(m.defendeurs):'<em>À compléter.</em>'}</p>`;}
 async function renderPreview(){
-  const photoMap=await buildPreviewPhotoMap();
-  const answers=state.missions.map((m,i)=>{const iv=m.intervention||blankIntervention();const concours=(iv.role!=="Expert"||iv.identity||iv.object)?`<div class="preview-intervention"><strong>Concours / intervenant :</strong> ${escapeHtml(iv.role)}${iv.identity?" — "+escapeHtml(iv.identity):""}${iv.specialty?" ("+escapeHtml(iv.specialty)+")":""}${iv.object?`<br>${escapeHtml(iv.object)}`:""}</div>`:"";return `<section><h3>${i+1}. ${escapeHtml(m.text)}</h3>${concours}<p>${m.response?nl2br(m.response):'<em>Réponse à rédiger.</em>'}</p>${previewPhotosHtml(photoMap[`mission:${m.id}`])}</section>`}).join("");
-  const contrad=(state.contradictoire||[]).map(e=>`<li><b>${escapeHtml(e.date||'Date à définir')}</b> — ${escapeHtml(e.type||'')}${e.destinataires?` — ${escapeHtml(e.destinataires)}`:''}${e.mode?` — ${escapeHtml(e.mode)}`:''}${e.details?`<br><span>${nl2br(e.details)}</span>`:''}${e.response?`<br><span><b>Suite / réponse :</b> ${nl2br(e.response)}</span>`:''}</li>`).join('')||'<li><em>Aucun événement contradictoire enregistré.</em></li>';
-  const ops=[...state.operations].sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(o=>`<li><b>${escapeHtml(o.date||"Date à définir")}</b> — ${escapeHtml(o.type)} — ${escapeHtml(o.title)}${o.notes?`<br><span>${nl2br(o.notes)}</span>`:""}</li>`).join("")||"<li><em>Aucune opération enregistrée.</em></li>";
+  const photoMap=await buildPreviewPhotoMap();normalizeDossierMeta(state);const meta=state.dossier.reportMeta;
+  const answers=state.missions.map((m,i)=>{const iv=m.intervention||blankIntervention();const concours=(iv.role!=="Expert"||iv.identity||iv.object)?`<div class="preview-intervention"><strong>Concours / intervenant :</strong> ${escapeHtml(iv.role)}${iv.identity?" — "+escapeHtml(iv.identity):""}${iv.specialty?" ("+escapeHtml(iv.specialty)+")":""}${iv.object?`<br>${escapeHtml(iv.object)}`:""}</div>`:"";return `<section><h3>${i+1}. ${escapeHtml(m.text)}${m.sourcePage?` <small>— ordonnance p.${m.sourcePage}</small>`:''}</h3>${concours}<p>${m.response?nl2br(m.response):'<em>Développement / réponse à rédiger.</em>'}</p>${previewPhotosHtml(photoMap[`mission:${m.id}`])}</section>`}).join("");
+  const history=reportHistoryItems().map(x=>`<li><b>${escapeHtml(x.date||'Date à définir')}</b> — ${escapeHtml(x.text)}</li>`).join('')||'<li><em>Aucune opération enregistrée.</em></li>';
   const annexes=state.annexMeta.map((a,i)=>`<li>Annexe A${String(i+1).padStart(2,"0")} — ${escapeHtml(a.name)}${a.description?` — ${escapeHtml(a.description)}`:""}</li>`).join("")||"<li><em>Aucune annexe.</em></li>";
-  $("reportPreview").innerHTML=`
-    <section class="report-cover">
-      <small>DOCUMENT DE TRAVAIL — V2.5</small>
-      <div class="cover-main"><h1>RAPPORT D’EXPERTISE JUDICIAIRE</h1><p>${escapeHtml(state.dossier.title||"Dossier d’expertise")}</p></div>
-      <div class="report-toc"><h2>Sommaire</h2><div class="toc-line"><span>Cadre de la mission</span></div><div class="toc-line"><span>1. Registre du contradictoire</span></div><div class="toc-line"><span>2. Déroulement des opérations</span></div><div class="toc-line"><span>3. Réponses aux missions de l’expert</span></div><div class="toc-line"><span>4. Annexes et pièces</span></div></div>
-    </section>
-    <div class="report-body">
-      <h2>Cadre de la mission</h2><p>${nl2br(state.resume)}</p>${previewPhotosHtml(photoMap.cadre)}
-      <h2>1. Registre du contradictoire</h2><ol>${contrad}</ol>
-      <h2>2. Déroulement des opérations</h2><ol>${ops}</ol>${previewPhotosHtml(photoMap.operations)}
-      <h2>3. Réponses aux missions de l’expert</h2>${answers}
-      <h2>4. Annexes et pièces</h2><ol>${annexes}</ol>${previewPhotosHtml(photoMap.annexes)}
-      <div class="preview-note">Aperçu de préparation uniquement. La forme, les visas, le contradictoire, la discussion technique, les dires et les conclusions devront être finalisés ultérieurement.</div>
-    </div>`;
+  $("reportPreview").innerHTML=`<section class="report-cover report-cover-v251"><div class="cover-meta"><strong>${escapeHtml(meta.juridiction||'JURIDICTION À COMPLÉTER')}</strong><span>${escapeHtml(meta.affaire||state.dossier.title||'Affaire à compléter')}</span><span>${meta.rg?'RG '+escapeHtml(meta.rg):'RG à compléter'}</span></div><div class="cover-main"><h1>${escapeHtml(meta.reportType||'RAPPORT DÉFINITIF')}</h1></div><div class="cover-footer">${escapeHtml(meta.expert||'Expert judiciaire — identité à compléter')}${meta.reportDate?' · '+escapeHtml(meta.reportDate):''}</div></section>
+  <section class="report-toc-page"><h2>SOMMAIRE</h2><div class="toc-line"><span>1. LES PARTIES</span></div><div class="toc-line"><span>2. MISSION DE L’EXPERT</span></div><div class="toc-line"><span>3. HISTORIQUE DES OPÉRATIONS</span></div><div class="toc-line"><span>4. DÉVELOPPEMENTS – CHEFS DE MISSION</span></div><div class="toc-line"><span>ANNEXES / PIÈCES / DIRES</span></div></section>
+  <div class="report-body"><h2>1. Les parties</h2>${reportPartiesHtml()}<h2>2. Mission de l’expert</h2>${state.missions.map((m,i)=>`<p><strong>${i+1}.</strong> ${escapeHtml(m.text)}${m.sourcePage?` <small>(ordonnance p.${m.sourcePage})</small>`:''}</p>`).join('')}<h2>3. Historique des opérations</h2><ol>${history}</ol>${previewPhotosHtml(photoMap.operations)}<h2>4. Développements – chefs de mission</h2>${answers}<h2>Annexes / pièces / dires</h2><ol>${annexes}</ol>${previewPhotosHtml(photoMap.annexes)}<div class="preview-note">Document de travail construit à partir des données validées par l’expert. L’ordonnance originale demeure la référence.</div></div>`;
 }
 
+function renderSummary(){normalizeDossierMeta(state);const facts=state.dossier.extractedFacts||[];const meta=state.dossier.reportMeta;const el=$("factsGrid");if(el)el.innerHTML=facts.length?facts.map(f=>`<article class="fact-card"><span>${escapeHtml(f.label)}</span><strong>${escapeHtml(f.value)}</strong><small>${f.page?`Ordonnance p.${f.page} · `:''}À contrôler sur l’original</small></article>`).join(''):'<div class="empty-zone">Aucune information structurée extraite avec une fiabilité suffisante.</div>';const ctl=$("controlsList");if(ctl)ctl.innerHTML=(state.vigilances||'').split('\n').filter(Boolean).map(x=>`<li>${escapeHtml(x.replace(/^•\s*/,''))}</li>`).join('');for(const input of document.querySelectorAll('[data-report-meta]'))input.value=meta[input.dataset.reportMeta]||'';bindReportMeta();}
 function renderAll(){
-  $("resumeText").value=state.resume||"";$("vigilancesText").value=state.vigilances||"";
+  normalizeDossierMeta(state);renderSummary();
   if($("dispositifVerbatim")) $("dispositifVerbatim").textContent=state.dossier.dispositifVerbatim||"Dispositif non disponible : consulter le PDF original.";
   if($("missionCheck")){const mc=state.dossier.missionCheck;$("missionCheck").textContent=!mc?"Aucun contrôle automatique disponible — comparer manuellement au dispositif.":mc.complete?`Contrôle automatique : ${mc.extractedCount} élément(s) structuré(s) extrait(s). Validation par l’expert obligatoire.`:`⚠ Extraction potentiellement incomplète : ${mc.extractedCount} extrait(s) / ${mc.candidateCount||"nombre indéterminé"} élément(s) repéré(s). Comparaison au dispositif obligatoire.`;}
   if($("missionValidationState"))$("missionValidationState").textContent=state.dossier.missionsValidated?`✓ Liste validée par l’expert le ${fmtDateTime(state.dossier.missionsValidatedAt)}`:"⚠ Liste non validée : export Word bloqué."; 
