@@ -9,7 +9,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="style.css">
-  <title>Assistant Expert Judiciaire V2.5.1</title>
+  <title>Assistant Expert Judiciaire V2.5.2</title>
 </head>
 <body>
 <header>
@@ -57,7 +57,7 @@
     <div id="resume" class="tab active">
       <article class="card"><div class="section-head"><div><h3>Synthèse de l’ordonnance</h3><p>Informations extraites sans interprétation juridique. Chaque donnée doit être contrôlée sur l’ordonnance originale.</p></div><span class="pill">Sources paginées</span></div><div id="factsGrid" class="facts-grid"></div><div class="source" id="resumeSource"></div></article>
       <div class="two summary-bottom"><article class="card"><h3>Identification du futur rapport</h3><div class="operation-grid"><label>Juridiction<input data-report-meta="juridiction"></label><label>N° RG<input data-report-meta="rg"></label><label>Affaire<input data-report-meta="affaire"></label><label>Expert judiciaire<input data-report-meta="expert"></label><label class="wide">Demandeur(s)<textarea class="editor mini" data-report-meta="demandeurs"></textarea></label><label class="wide">Défendeur(s)<textarea class="editor mini" data-report-meta="defendeurs"></textarea></label><label>Type de document<select data-report-meta="reportType"><option>RAPPORT DÉFINITIF</option><option>PRÉRAPPORT</option><option>NOTE AUX PARTIES</option></select></label><label>Date du rapport<input type="date" data-report-meta="reportDate"></label></div></article><article class="card alert"><h3>Contrôles requis</h3><ul id="controlsList" class="control-list"></ul></article></div>
-      <p class="limit">Cette V2.5.1 détecte la couche texte avec PDF.js, lance un OCR local si le PDF est scanné et préremplit le dossier. PDF.js, le moteur OCR et le modèle français sont physiquement embarqués dans l’application : aucune connexion Internet n’est nécessaire pour analyser une ordonnance. Elle ne réalise pas d’analyse juridique approfondie et ne remplace ni l’ordonnance originale ni l’appréciation de l’expert.</p>
+      <p class="limit">Cette V2.5.2 détecte la couche texte avec PDF.js, lance un OCR local si le PDF est scanné et préremplit le dossier. PDF.js, le moteur OCR et le modèle français sont physiquement embarqués dans l’application : aucune connexion Internet n’est nécessaire pour analyser une ordonnance. Elle ne réalise pas d’analyse juridique approfondie et ne remplace ni l’ordonnance originale ni l’appréciation de l’expert.</p>
     </div>
 
     <div id="mission" class="tab">
@@ -121,7 +121,7 @@
     </div>
   </section>
 </main>
-<footer>Assistant Expert Judiciaire V2.5.1 · Prototype local · Ne constitue pas un avis juridique</footer>
+<footer>Assistant Expert Judiciaire V2.5.2 · Prototype local · Ne constitue pas un avis juridique</footer>
 <script src="app.js"></script>
 </body>
 </html>
