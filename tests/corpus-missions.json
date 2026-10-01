@@ -1,0 +1,14 @@
+[
+ {"id":"T01-puces-classiques","text":"DISONS que l'expert aura pour mission de :\n• Prendre connaissance des documents ;\n• Convoquer les parties ;\n• Se rendre sur les lieux ;\n• Examiner les désordres ;\n• Répondre aux dires ;\nDISONS que la partie consignera la provision","expected":5},
+ {"id":"T02-verbes-hors-liste","text":"L'expert aura pour mission de :\n• Constater les désordres ;\n• Rechercher leur origine ;\n• Estimer le coût ;\n• Identifier les responsabilités techniques ;\nORDONNONS le dépôt","expected":4},
+ {"id":"T03-numerotation-degre","text":"DISONS que l'expert aura pour mission de :\n1°) Visiter les lieux ;\n2°) Indiquer les non-conformités ;\n3°) Vérifier les métrés ;\n4°) Chiffrer les reprises ;\nRAPPELONS que...","expected":4},
+ {"id":"T04-numerotation-parenthese","text":"L'expert aura pour mission de :\n1) Se faire communiquer les pièces ;\n2) Donner son avis ;\n3) Décrire les travaux ;\nFIXONS la consignation","expected":3},
+ {"id":"T05-tirets","text":"DISONS que l'experte aura pour mission de :\n- Examiner le bien ;\n- Entendre tout sachant ;\n- Faire toutes observations utiles ;\nINDIQUONS que...","expected":3},
+ {"id":"T06-lettres","text":"L'expert aura pour mission de :\nA) Vérifier les plans ;\nB) Mesurer les ouvrages ;\nC) Comparer aux règles de l'art ;\nORDONNONS...","expected":3},
+ {"id":"T07-puces-multilignes","text":"DISONS que l'expert aura pour mission de :\n• Examiner les désordres affectant l'immeuble,\nen préciser la nature et l'importance ;\n• Préconiser les travaux,\nen préciser le coût ;\nDISONS que...","expected":2},
+ {"id":"T08-formule-experte","text":"DISONS que l'experte aura pour mission de :\n• Constater ;\n• Chiffrer ;\n• Répondre aux dires ;\nCONDAMNONS...","expected":3},
+ {"id":"T09-ancre-courte","text":"L'expert aura pour mission de :\n• Visiter ;\n• Décrire ;\n• Évaluer ;\nRAPPELONS...","expected":3},
+ {"id":"T10-puces-unicode","text":"DISONS que l'expert aura pour mission de :\n▪ Examiner les pièces ;\n▪ Rechercher les causes ;\n▪ Donner un avis technique ;\nDESIGNONS...","expected":3},
+ {"id":"T11-num-point","text":"DISONS que l'expert aura pour mission de :\n1. Examiner les lieux ;\n2. Déterminer les causes ;\n3. Évaluer les travaux ;\nORDONNONS...","expected":3},
+ {"id":"T12-echec-bruyant","text":"PAR CES MOTIFS\nORDONNONS une expertise. La mission figure dans une annexe non reproduite.","expected":0,"mustFlagIncomplete":true}
+]

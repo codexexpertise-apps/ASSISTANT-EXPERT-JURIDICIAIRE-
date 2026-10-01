@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#173a59">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+  <title>Assistant Expert Judiciaire V2.5</title>
+</head>
+<body>
+<header>
+  <div><h1>Assistant Expert Judiciaire</h1><p>Préparation locale des opérations et du futur rapport</p></div>
+  <span class="local">● Local · sauvegarde automatique</span>
+</header>
+<main>
+  <section id="home" class="screen active">
+    <div class="intro">
+      <div><span class="kicker">NOUVEAU DOSSIER</span><h2>Préparer une expertise</h2><p>Importe l’ordonnance PDF pour ouvrir un dossier de travail local : mission, réponses aux missions de l’expert, photos, annexes, opérations et aperçu du futur rapport.</p></div>
+      <div class="security"><b>Confidentialité</b><p>Les dossiers, PDF, photos, annexes et textes restent enregistrés localement sur cet ordinateur. La V2.5 bloque les connexions réseau applicatives par une politique CSP. Protéger le compte Windows, verrouiller le poste et effectuer régulièrement une sauvegarde locale complète.</p><p id="storageState" class="engine-state">Vérification du stockage persistant…</p></div>
+    </div>
+    <div class="drop" id="drop">
+      <input id="pdfInput" type="file" accept="application/pdf" hidden>
+      <div class="pdf">PDF</div>
+      <h3 id="fileName">Aucune ordonnance sélectionnée</h3>
+      <p id="fileInfo">PDF texte ou PDF scanné · OCR local automatique si nécessaire</p>
+      <button id="chooseBtn">Choisir un PDF</button>
+      <button id="analyseBtn" class="primary" disabled>Créer le dossier et analyser</button>
+    </div>
+    <section class="dossiers-home"><div class="section-head"><div><h3>Mes dossiers</h3><p>Chaque ordonnance crée un dossier distinct. Aucun dossier existant n’est écrasé.</p></div></div><div id="dossierList"></div></section>
+    <section class="backup-home"><div class="section-head"><div><h3>Sauvegarde locale</h3><p>Exporte ou restaure l’ensemble des dossiers, PDF, photos et annexes dans une sauvegarde chiffrée AES-256-GCM protégée par mot de passe.</p></div></div><div class="backup-actions"><button id="backupExportBtn" class="primary">Exporter tous les dossiers</button><button id="backupImportBtn">Restaurer une sauvegarde</button><input id="backupImportInput" type="file" accept="application/json,.json,.aej-backup" hidden><span id="backupState" class="backup-state">Aucune sauvegarde créée depuis cette version.</span></div></section>
+    <div id="status" class="status hidden"></div>
+  </section>
+
+  <section id="dossier" class="screen">
+    <div class="toolbar">
+      <button data-back>← Accueil</button>
+      <div><small>DOSSIER DE TRAVAIL LOCAL</small><h2 id="dossierTitle">Ordonnance importée</h2></div>
+      <div class="toolbar-actions"><div class="save-state"><span id="saveDot">●</span> <span id="saveState">Sauvegardé</span></div></div>
+    </div>
+
+    <nav id="tabsNav">
+      <button class="active" data-tab="resume">Résumé</button>
+      <button data-tab="mission">Mission</button>
+      <button data-tab="redaction">Rédaction</button>
+      <button data-tab="photos">Photos</button>
+      <button data-tab="annexes">Annexes</button>
+      <button data-tab="contradictoire">Contradictoire</button>
+      <button data-tab="operations">Opérations</button>
+      <button data-tab="taches">Tâches</button>
+      <button data-tab="apercu">Aperçu rapport</button>
+    </nav>
+
+    <div id="resume" class="tab active">
+      <div class="two">
+        <article class="card">
+          <h3>Cadre de la mission — rédaction de l’expert</h3>
+          <textarea id="resumeText" class="editor tall" aria-label="Résumé factuel"></textarea>
+          <div class="source" id="resumeSource">Texte de travail à relire et valider par l’expert.</div>
+        </article>
+        <article class="card alert">
+          <h3>Vigilances / points à vérifier</h3>
+          <textarea id="vigilancesText" class="editor tall" aria-label="Vigilances"></textarea>
+        </article>
+      </div>
+      <p class="limit">Cette V2.5 détecte la couche texte avec PDF.js, lance un OCR local si le PDF est scanné et préremplit le dossier. PDF.js, le moteur OCR et le modèle français sont physiquement embarqués dans l’application : aucune connexion Internet n’est nécessaire pour analyser une ordonnance. Elle ne réalise pas d’analyse juridique approfondie et ne remplace ni l’ordonnance originale ni l’appréciation de l’expert.</p>
+    </div>
+
+    <div id="mission" class="tab">
+      <article class="card">
+        <div class="section-head"><div><h3>Missions de l’expert</h3><p>Missions extraites du dispositif de l’ordonnance, à relire et valider par l’expert.</p></div><button id="addMission">+ Ajouter une mission</button></div>
+        <div id="missionCheck" class="source"></div><div class="mission-validation"><button id="validateMissionsBtn" class="primary">Valider la liste des missions après comparaison</button><span id="missionValidationState" class="source"></span></div><details class="card"><summary>Afficher le dispositif extrait verbatim</summary><pre id="dispositifVerbatim" style="white-space:pre-wrap"></pre></details><div id="missionList" class="mission-list"></div>
+      </article>
+    </div>
+
+    <div id="redaction" class="tab">
+      <article class="card">
+        <div class="section-head"><div><h3>Rédaction par mission</h3><p>Réponse de l’expert et, si nécessaire, traçabilité d’un assistant ou d’un technicien-sapiteur intervenant sous le cadre défini par l’expert.</p></div><span class="pill">Auto-enregistré</span></div>
+        <div id="responseList" class="response-list"></div>
+      </article>
+    </div>
+
+    <div id="photos" class="tab">
+      <article class="card">
+        <div class="section-head"><div><h3>Photographies</h3><p>Numérotation automatique, légende, classement et emplacement dans le rapport.</p></div><button id="addPhotoBtn">+ Importer des photos</button></div>
+        <input id="photoInput" type="file" accept="image/*" multiple hidden>
+        <div class="filter-row"><label>Classement <select id="photoFilter"><option value="">Toutes les photos</option></select></label><button id="renumberPhotos">Renuméroter</button></div>
+        <div id="photoGrid" class="photo-grid empty-zone">Aucune photo importée.</div>
+      </article>
+    </div>
+
+    <div id="annexes" class="tab">
+      <article class="card">
+        <div class="section-head"><div><h3>Annexes et pièces</h3><p>Import local, classement et description.</p></div><button id="addAnnexBtn">+ Importer des annexes</button></div>
+        <input id="annexInput" type="file" multiple hidden>
+        <div id="annexList" class="annex-list empty-zone">Aucune annexe importée.</div>
+      </article>
+    </div>
+
+    <div id="contradictoire" class="tab">
+      <article class="card">
+        <div class="section-head"><div><h3>Registre du contradictoire</h3><p>Tracer les convocations, présences, pièces communiquées, dires reçus et réponses apportées.</p></div><button id="addContradictoire">+ Ajouter un événement</button></div>
+        <div id="contradictoireList"></div>
+      </article>
+    </div>
+
+    <div id="operations" class="tab">
+      <article class="card">
+        <div class="section-head"><div><h3>Historique des opérations</h3><p>Réunions, visites, échanges, notes techniques et jalons.</p></div><button id="addOperation">+ Ajouter une opération</button></div>
+        <div id="operationList"></div>
+      </article>
+    </div>
+
+    <div id="taches" class="tab">
+      <article class="card">
+        <div class="task-head"><div><h3>Plan de travail</h3><p id="taskCount">0 échéance confirmée</p></div><button id="addTask">+ Ajouter une tâche</button></div>
+        <div id="taskList"></div>
+        <div class="actions"><button id="icsBtn" class="primary">Exporter calendrier (.ics)</button></div>
+      </article>
+    </div>
+
+    <div id="apercu" class="tab">
+      <article class="card preview-shell">
+        <div class="section-head"><div><h3>Aperçu structuré du futur rapport</h3><p>Prévisualisation du rapport et export Word local au format .docx.</p></div><div class="preview-actions"><button id="refreshPreview">Actualiser</button><button id="wordExportBtn" class="primary">Exporter en Word (.docx)</button></div></div>
+        <div id="reportPreview" class="report-preview"></div>
+      </article>
+    </div>
+  </section>
+</main>
+<footer>Assistant Expert Judiciaire V2.5 · Prototype local · Ne constitue pas un avis juridique</footer>
+<script src="app.js"></script>
+</body>
+</html>

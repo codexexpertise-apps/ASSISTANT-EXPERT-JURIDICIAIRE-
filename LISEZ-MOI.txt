@@ -1,0 +1,26 @@
+ASSISTANT EXPERT JUDICIAIRE — V2.5 GITHUB
+
+VERSION CIBLE : GitHub Pages / HTTPS.
+
+DÉPLOIEMENT
+1. Décompresser cette archive.
+2. Copier le CONTENU du dossier ASSISTANT-EXPERT-JUDICIAIRE-V2.5-GITHUB à la racine du dépôt GitHub.
+3. Activer GitHub Pages sur la branche de déploiement.
+4. Ouvrir l’URL HTTPS fournie par GitHub Pages.
+
+IMPORTANT
+- Ne pas tester cette version par double-clic sur index.html (file://).
+- PDF.js 6.3.289, Tesseract Core 7 et fra.traineddata sont physiquement embarqués dans vendor/.
+- Aucun CDN n’est utilisé par le moteur PDF/OCR.
+- Les PDF et données de dossier restent traités dans le navigateur et ne sont pas envoyés à GitHub par le code de l’application.
+- La CSP autorise 'unsafe-eval' uniquement parce que le build WebAssembly/Emscripten Tesseract Core fourni l’exige pour son initialisation. Les connexions restent limitées à 'self'.
+- Après un premier chargement HTTPS réussi, le service worker met en cache les composants locaux pour le mode hors connexion.
+
+TEST DE RECETTE PRIORITAIRE
+1. Ouvrir l’application depuis GitHub Pages.
+2. Importer l’ordonnance scannée de test.
+3. Vérifier que PDF.js charge le document puis que l’OCR local démarre.
+4. Vérifier la liste des missions et la comparer au dispositif original avant validation.
+5. Recharger l’application, couper Internet et refaire un test OCR pour valider le fonctionnement hors ligne.
+
+Ne pas diffuser cette version comme version finale avant validation de ces tests sur le poste utilisateur.
