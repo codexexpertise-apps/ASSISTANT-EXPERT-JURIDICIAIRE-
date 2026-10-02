@@ -35,3 +35,6 @@
 
 /* V2.5.1 métier */
 .facts-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px}.fact-card{border:1px solid #d8d4cc;border-left:3px solid #b08a3e;padding:14px;background:#fff}.fact-card span,.fact-card small{display:block;color:#665f54}.fact-card strong{display:block;margin:6px 0;white-space:normal}.summary-bottom{margin-top:18px}.control-list{margin:0;padding-left:22px;line-height:1.55}.report-cover-v251{min-height:760px;display:flex;flex-direction:column}.cover-meta{display:flex;flex-direction:column;gap:6px}.cover-footer{margin-top:auto;border-top:1px solid #b08a3e;padding-top:10px}.report-toc-page{min-height:650px;border:1px solid #bbb;padding:38px;margin:28px auto;max-width:620px}.report-toc-page .toc-line{font-weight:700;margin:26px 0}@media(max-width:800px){.facts-grid{grid-template-columns:1fr}}
+
+/* V2.5.3 — diagnostic OCR, sans impact sur les écrans métier */
+.diagnostic-card{margin:18px 0}.diagnostic-card>summary{cursor:pointer;font-weight:700}.ocr-page{margin:10px 0;border:1px solid #ddd;padding:10px}.ocr-page summary{cursor:pointer}.ocr-page pre{white-space:pre-wrap;max-height:360px;overflow:auto;background:#f7f7f7;padding:12px;font-size:12px;line-height:1.45}
