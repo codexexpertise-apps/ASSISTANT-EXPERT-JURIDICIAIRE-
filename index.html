@@ -5,16 +5,16 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#173a59">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="manifest.json?v=2.5.4">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css">
-  <title>Assistant Expert Judiciaire V2.5.3</title>
+  <link rel="stylesheet" href="style.css?v=2.5.4">
+  <title>Assistant Expert Judiciaire V2.5.4</title>
 </head>
 <body>
 <header>
   <div><h1>Assistant Expert Judiciaire</h1><p>Préparation locale des opérations et du futur rapport</p></div>
-  <span class="local">● Local · sauvegarde automatique</span>
+  <div class="header-state"><span class="engine-version">Version moteur : V2.5.4</span><span class="local">● Local · sauvegarde automatique</span></div>
 </header>
 <main>
   <section id="home" class="screen active">
@@ -57,15 +57,13 @@
     <div id="resume" class="tab active">
       <article class="card"><div class="section-head"><div><h3>Synthèse de l’ordonnance</h3><p>Informations extraites sans interprétation juridique. Chaque donnée doit être contrôlée sur l’ordonnance originale.</p></div><span class="pill">Sources paginées</span></div><div id="factsGrid" class="facts-grid"></div><div class="source" id="resumeSource"></div></article>
       <div class="two summary-bottom"><article class="card"><h3>Identification du futur rapport</h3><div class="operation-grid"><label>Juridiction<input data-report-meta="juridiction"></label><label>N° RG<input data-report-meta="rg"></label><label>Affaire<input data-report-meta="affaire"></label><label>Expert judiciaire<input data-report-meta="expert"></label><label class="wide">Demandeur(s)<textarea class="editor mini" data-report-meta="demandeurs"></textarea></label><label class="wide">Défendeur(s)<textarea class="editor mini" data-report-meta="defendeurs"></textarea></label><label>Type de document<select data-report-meta="reportType"><option>RAPPORT DÉFINITIF</option><option>PRÉRAPPORT</option><option>NOTE AUX PARTIES</option></select></label><label>Date du rapport<input type="date" data-report-meta="reportDate"></label></div></article><article class="card alert"><h3>Contrôles requis</h3><ul id="controlsList" class="control-list"></ul></article></div>
-      <p class="limit">Cette V2.5.3 détecte la couche texte avec PDF.js, lance un OCR local si le PDF est scanné et préremplit le dossier. PDF.js, le moteur OCR et le modèle français sont physiquement embarqués dans l’application : aucune connexion Internet n’est nécessaire pour analyser une ordonnance. Elle ne réalise pas d’analyse juridique approfondie et ne remplace ni l’ordonnance originale ni l’appréciation de l’expert.</p>
+      <p class="limit">Cette V2.5.4 détecte la couche texte avec PDF.js, lance un OCR local si le PDF est scanné et préremplit le dossier. PDF.js, le moteur OCR et le modèle français sont physiquement embarqués dans l’application : aucune connexion Internet n’est nécessaire pour analyser une ordonnance. Elle ne réalise pas d’analyse juridique approfondie et ne remplace ni l’ordonnance originale ni l’appréciation de l’expert.</p>
     </div>
 
     <div id="mission" class="tab">
       <article class="card">
         <div class="section-head"><div><h3>Missions de l’expert</h3><p>Missions extraites du dispositif de l’ordonnance, à relire et valider par l’expert.</p></div><button id="addMission">+ Ajouter une mission</button></div>
-        <div id="missionCheck" class="source"></div>
-        <details class="card diagnostic-card"><summary>Diagnostic de lecture PDF / OCR</summary><div class="section-head"><div><p>Texte brut réellement produit page par page par PDF.js ou Tesseract. Ce diagnostic sert uniquement au contrôle de l’extraction.</p></div><button id="downloadOcrDiagnostic" type="button">Télécharger le texte brut</button></div><div id="ocrDiagnostic"></div></details>
-        <div class="mission-validation"><button id="validateMissionsBtn" class="primary">Valider la liste des missions après comparaison</button><span id="missionValidationState" class="source"></span></div><details class="card"><summary>Afficher le dispositif extrait verbatim</summary><pre id="dispositifVerbatim" style="white-space:pre-wrap"></pre></details><div id="missionList" class="mission-list"></div>
+        <div id="missionCheck" class="source"></div><details class="card diagnostic-card"><summary>Diagnostic PDF / OCR conservé</summary><div class="section-head"><div><p>Texte brut réellement produit page par page, enregistré avant toute extraction métier.</p></div><button id="downloadOcrDiagnostic" type="button">Télécharger le texte brut</button></div><div id="ocrDiagnostic"></div></details><div class="mission-validation"><button id="validateMissionsBtn" class="primary">Valider la liste des missions après comparaison</button><span id="missionValidationState" class="source"></span></div><details class="card"><summary>Afficher le dispositif extrait verbatim</summary><pre id="dispositifVerbatim" style="white-space:pre-wrap"></pre></details><div id="missionList" class="mission-list"></div>
       </article>
     </div>
 
@@ -123,7 +121,7 @@
     </div>
   </section>
 </main>
-<footer>Assistant Expert Judiciaire V2.5.3 · Prototype local · Ne constitue pas un avis juridique</footer>
-<script src="app.js"></script>
+<footer>Assistant Expert Judiciaire V2.5.4 · Prototype local · Ne constitue pas un avis juridique</footer>
+<script src="app.js?v=2.5.4"></script>
 </body>
 </html>

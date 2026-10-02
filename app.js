@@ -1,3 +1,4 @@
+console.info("AEJ — Version moteur V2.5.4 — app.js 2026-10-02");
 const DEFAULT_MISSIONS = [
   "Prendre connaissance des documents contractuels et de toutes les pièces utiles.",
   "Convoquer les parties et recueillir contradictoirement leurs observations.",
@@ -43,7 +44,7 @@ function indexUpsert(s){
   idx.currentId=d.id; idx.dossiers.sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||''))); saveIndex(idx); currentId=d.id;
 }
 function loadDossier(id){
-  try{const v=JSON.parse(localStorage.getItem(dossierKey(id)));if(v){v.version="2.5.3";normalizeMissionInterventions(v);normalizePhotoPlacements(v);normalizeDossierMeta(v);if(!Array.isArray(v.contradictoire))v.contradictoire=[];if(typeof v.dossier.missionsValidated!=='boolean')v.dossier.missionsValidated=false;return v;}}catch{}
+  try{const v=JSON.parse(localStorage.getItem(dossierKey(id)));if(v){v.version="2.5.4";normalizeMissionInterventions(v);normalizePhotoPlacements(v);normalizeDossierMeta(v);if(!Array.isArray(v.contradictoire))v.contradictoire=[];if(typeof v.dossier.missionsValidated!=='boolean')v.dossier.missionsValidated=false;return v;}}catch{}
   return null;
 }
 function migrateLegacy(){
@@ -55,7 +56,7 @@ function migrateLegacy(){
 }
 function blankState(){
   return {
-    version:"2.5.3",
+    version:"2.5.4",
     dossier:{id:uid(),title:"", ordonnanceName:"", ordonnanceFileId:"", reportMeta:blankReportMeta(), extractedFacts:[], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()},
     resume:"",
     vigilances:"• Vérifier les dates, délais et point de départ des échéances.\n• Vérifier exactement les missions de l’expert figurant au dispositif.\n• Identifier les parties, pièces annoncées et opérations à organiser.\n• Signaler ici toute incohérence ou information nécessitant une vérification.",
@@ -81,7 +82,7 @@ function normalizePhotoPlacements(s){
 function persist(reason="Modification"){
   if(!state?.dossier?.id)return false;
   try{
-    state.version="2.5.3"; state.dossier.updatedAt=new Date().toISOString();
+    state.version="2.5.1"; state.dossier.updatedAt=new Date().toISOString();
     localStorage.setItem(dossierKey(state.dossier.id),JSON.stringify(state)); indexUpsert(state);
     setSaveState("Sauvegardé"); renderDossierList();
     clearTimeout(saveTimer); saveTimer=setTimeout(()=>setSaveState("Sauvegarde locale active"),1200); return true;
@@ -197,81 +198,30 @@ function findPageForSnippet(pages,snippet){
   for(const p of pages){const hay=normalizeForMatch(p.text);const s=words.reduce((n,w)=>n+(hay.includes(w)?1:0),0);if(s>score){score=s;best=p.page;}}
   return score>=Math.min(3,words.length)?best:null;
 }
-function missionVerbStart(text){
-  return /^(?:prendre|convoquer|se\s+rendre|examiner|décrire|decrire|déterminer|determiner|dire|préconiser|preconiser|entendre|faire|évaluer|evaluer|rédiger|rediger|répondre|repondre|constater|rechercher|estimer|identifier|vérifier|verifier|visiter|indiquer|mesurer|comparer|se\s+faire|fournir|donner|d['’]une\s+manière|d['’]une\s+maniere)\b/i.test(text.trim());
-}
-function missionAnchorScore(lines,i){
-  const here=normalizeForMatch(lines[i]||''), around=normalizeForMatch(lines.slice(Math.max(0,i-2),i+3).join(' '));
-  let score=0;
-  if(/mission/.test(here))score+=3;
-  if(/expert/.test(here))score+=2;
-  if(/aura/.test(here)&&/mission/.test(here))score+=4;
-  if(/pour mission/.test(around))score+=2;
-  if(/disons/.test(around))score+=1;
-  if(/mission (?:confiee|confiees)/.test(around))score+=1;
-  return score;
-}
 function extractMissionZone(pages){
-  // Work page-by-page on the REAL PDF.js/OCR output. No approximate character-ratio mapping.
-  let startPageIndex=-1,startLineIndex=-1,best={score:0,pi:-1,li:-1};
-  for(let pi=0;pi<pages.length;pi++){
-    const lines=cleanPdfText(pages[pi].text).split(/\n+/).map(x=>x.trim()).filter(Boolean);
-    for(let li=0;li<lines.length;li++){
-      const sc=missionAnchorScore(lines,li);
-      if(sc>best.score)best={score:sc,pi,li};
-      if(sc>=6){startPageIndex=pi;startLineIndex=li;break;}
-    }
-    if(startPageIndex>=0)break;
-  }
-  // OCR-tolerant fallback: a strong "mission" neighbourhood is acceptable but is flagged later.
-  if(startPageIndex<0 && best.score>=4){startPageIndex=best.pi;startLineIndex=best.li;}
-  if(startPageIndex<0)return {zone:'',startFound:false,pages:[],startPage:null,endPage:null,anchorConfidence:'faible'};
-  const collected=[];let started=false,endPage=null;
-  for(let pi=startPageIndex;pi<pages.length;pi++){
-    const page=pages[pi], lines=cleanPdfText(page.text).split(/\n+/).map(x=>x.trim()).filter(Boolean);
-    const from=pi===startPageIndex?startLineIndex+1:0;
-    for(let li=from;li<lines.length;li++){
-      const line=lines[li], n=normalizeForMatch(line);
-      if(!started && !missionVerbStart(line) && !/^[•·▪◦*+\-–—°«»]/.test(line))continue;
-      if(started && /^(?:disons|ordonnons|rappelons|condamnons|designons|indiquons|fixons)\b/.test(n)){endPage=page.page;break;}
-      if(/^(?:n[°º]\s*rg|page\s+\d+\s+sur\s+\d+)/i.test(line))continue;
-      collected.push(`[[PAGE ${page.page}]] ${line}`);started=true;
-    }
-    if(endPage!==null)break;
-  }
-  const used=[...new Set(collected.map(x=>Number((x.match(/^\[\[PAGE\s+(\d+)\]\]/)||[])[1])).filter(Boolean))];
-  return {zone:collected.join('\n'),startFound:true,pages:used,startPage:used[0]||pages[startPageIndex].page,endPage:used.at(-1)||pages[startPageIndex].page,anchorConfidence:best.score>=6?'élevée':'moyenne'};
+  const joined=pages.map(p=>`\n[[PAGE ${p.page}]]\n${p.text}`).join('\n');
+  const n=normalizeForMatch(joined);
+  const anchors=[/disons que l.expert(?:e)? aura pour mission de\s*:?/,/l.expert(?:e)? aura pour mission de\s*:?/,/mission(?:s)? (?:confiee|confiees) a l.expert[\s\S]{0,300}?:/];
+  let start=-1; for(const re of anchors){const m=re.exec(n);if(m){start=m.index+m[0].length;break;}}
+  if(start<0)return {zone:'',startFound:false,pages:[]};
+  const ratio=start/Math.max(1,n.length), approx=Math.floor(joined.length*ratio); let zone=joined.slice(Math.max(0,approx-350),approx+24000);
+  const visible=zone.search(/(?:expert(?:e)?\s+aura\s+pour\s+mission\s+de|missions?\s+confi[ée]es?\s+[àa]\s+l['’]expert)/i); if(visible>=0)zone=zone.slice(visible).replace(/^[\s\S]*?(?:mission\s+de|expert)\s*:?/i,'');
+  const stop=zone.search(/\n\s*(?:DISONS|ORDONNONS|RAPPELONS|CONDAMNONS|DESIGNONS|DÉSIGNONS|INDIQUONS|FIXONS)\b/i); if(stop>80)zone=zone.slice(0,stop);
+  const pageNos=[...zone.matchAll(/\[\[PAGE\s+(\d+)\]\]/gi)].map(m=>Number(m[1]));
+  return {zone:cleanPdfText(zone),startFound:true,pages:pageNos};
 }
 function extractMissionItemsFromPages(pages){
-  const mz=extractMissionZone(pages);
-  if(!mz.startFound)return {items:[],complete:false,reason:"Ancre de mission non reconnue dans la sortie OCR/PDF.js",zone:"",candidateCount:0,residual:"",structuralCount:0,reconstructedCount:0,anchorConfidence:'faible'};
-  const marker=/^(?:[•·▪◦*+\-–—°«»]|\d{1,2}\s*(?:[°º]\s*\)|[°º]|[.)-])|[A-Z]\s*[.)-])\s*/;
-  const rows=mz.zone.split(/\n+/).filter(Boolean);
-  const chunks=[];let cur='',curPage=null,structuralCount=0,reconstructedCount=0;
-  const push=()=>{if(cur.trim())chunks.push({text:cur.trim(),page:curPage});cur='';curPage=null;};
-  for(const row of rows){
-    const pm=row.match(/^\[\[PAGE\s+(\d+)\]\]\s*(.*)$/);if(!pm)continue;
-    const page=Number(pm[1]);let line=pm[2].trim();if(!line)continue;
-    const structural=marker.test(line);
-    const semantic=!structural && missionVerbStart(line) && (!cur || /[,;:.]\s*$/.test(cur) || cur.length>80);
-    if(structural||semantic){
-      if(cur)push();curPage=page;
-      if(structural){structuralCount++;line=line.replace(marker,'').trim();}else reconstructedCount++;
-      cur=line;
-    }else if(cur)cur+=' '+line;
+  const mz=extractMissionZone(pages); if(!mz.startFound)return {items:[],complete:false,reason:"Ancre du dispositif non reconnue",zone:"",candidateCount:0,residual:""};
+  let zone=mz.zone.replace(/N[°º]\s*RG[^\n]{0,120}Page\s+\d+\s+sur\s+\d+/gi,'\n');
+  const marker=/^(?:\s*(?:[•·▪◦*+\-–—°«»]|\d{1,2}\s*(?:[°º]\s*\)|[°º]|[.)-])|[A-Z]\s*[.)-])\s+)/;
+  const lines=zone.split(/\n+/).map(x=>x.trim()).filter(Boolean); const chunks=[]; let cur=''; let marked=0;
+  for(let line of lines){ if(/^\[\[PAGE\s+\d+\]\]$/i.test(line))continue; const structural=marker.test(line); const probableMissingMarker=!structural&&cur&&/[,;]\s*$/.test(cur)&&/^[A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ’' -]{2,30}\b/.test(line); if(structural||probableMissingMarker){marked++; if(cur)chunks.push(cur); cur=structural?line.replace(marker,'').trim():line.trim();} else {cur+=(cur?' ':'')+line;} } if(cur)chunks.push(cur);
+  if(marked===0){
+    const inline=zone.split(/(?=\s(?:[•·▪◦]|\d{1,2}\s*(?:[°º]\s*\)|[°º]|[.)-]))\s+)/).map(x=>x.replace(marker,'').trim()).filter(x=>x.length>15); if(inline.length>1){marked=inline.length;chunks.splice(0,chunks.length,...inline);}
   }
-  push();
-  const items=[];
-  for(const c of chunks){
-    let text=cleanPdfText(c.text).replace(/\s+/g,' ').trim();
-    if(text.length<12)continue;
-    if(!missionVerbStart(text) && items.length===0)continue;
-    if(!/[.!?;]$/.test(text))text+='.';
-    items.push({text,page:c.page});
-  }
-  const complete=items.length>0 && mz.anchorConfidence!=='faible';
-  const reason=!items.length?"Aucun chef de mission exploitable après reconstruction":mz.anchorConfidence==='moyenne'?"Ancre de mission reconnue avec tolérance OCR : comparaison manuelle obligatoire":"";
-  return {items:items.slice(0,50),complete,reason,zone:mz.zone,candidateCount:items.length,residual:reason,structuralCount,reconstructedCount,startPage:mz.startPage,endPage:mz.endPage,anchorConfidence:mz.anchorConfidence};
+  const items=[]; for(let x of chunks){x=cleanPdfText(x).replace(/\[\[PAGE\s+\d+\]\]/gi,' ').replace(/\s+/g,' ').trim(); if(x.length<12)continue; if(!/[.!?]$/.test(x))x+='.'; items.push({text:x,page:findPageForSnippet(pages,x)});}
+  const candidateCount=marked||items.length; const residual=candidateCount>0&&items.length!==candidateCount?`Éléments structurés repérés : ${candidateCount}; missions exploitables : ${items.length}.`:'';
+  return {items:items.slice(0,40),complete:items.length>0 && (!candidateCount||items.length===candidateCount),reason:items.length?residual:"Aucune mission structurée reconnue",zone:mz.zone,candidateCount,residual};
 }
 function nearbyExtract(text,regex,span=260){const m=regex.exec(text);if(!m)return'';return cleanPdfText(text.slice(Math.max(0,m.index-60),Math.min(text.length,m.index+m[0].length+span))).replace(/\n/g,' ');}
 function nearbyExtractLast(text,regex,span=260){let found=null,m;regex.lastIndex=0;while((m=regex.exec(text))!==null){found=m;if(!regex.global)break;if(m.index===regex.lastIndex)regex.lastIndex++;}if(!found)return'';return cleanPdfText(text.slice(Math.max(0,found.index-60),Math.min(text.length,found.index+found[0].length+span))).replace(/\n/g,' ');}
@@ -298,21 +248,29 @@ function extractIdentityFacts(pages){
   return facts;
 }
 function buildAnalysis(extracted){
-  const mx=extractMissionItemsFromPages(extracted.pages),vig=extractVigilances(extracted.pages);
-  const facts=[...extractIdentityFacts(extracted.pages),...vig.map(v=>({label:v.title,value:v.source,page:v.page,kind:'ordonnance',control:v.comment}))];
-  const controls=[...vig.map(v=>v.comment)];
-  if(!mx.complete)controls.push(`Extraction des missions potentiellement incomplète : ${mx.reason||mx.residual||'contrôle manuel requis'}. Comparer impérativement la liste au dispositif reproduit dans l’onglet Mission.`);
-  controls.push(`Diagnostic extraction : ${mx.items.length} chef(s) proposé(s) · pages ${mx.startPage||'?'}${mx.endPage&&mx.endPage!==mx.startPage?'–'+mx.endPage:''} · ${mx.structuralCount||0} début(s) structurés · ${mx.reconstructedCount||0} début(s) reconstruits · ancre ${mx.anchorConfidence||'indéterminée'}.`);
-  controls.push("Tout préremplissage doit être contrôlé sur le PDF original avant validation.");
-  const ocrDiagnostic=extracted.pages.map(p=>({page:p.page,source:p.source,confidence:p.confidence,ocrConfidence:p.ocrConfidence??null,text:p.text}));
-  return {facts,controls,missions:mx.items.map(m=>m.text),missionSources:mx.items.map(m=>({text:m.text,page:m.page})),missionCheck:{complete:mx.complete,candidateCount:mx.candidateCount,extractedCount:mx.items.length,reason:mx.reason,structuralCount:mx.structuralCount,reconstructedCount:mx.reconstructedCount,startPage:mx.startPage,endPage:mx.endPage,anchorConfidence:mx.anchorConfidence},dispositifVerbatim:mx.zone,pages:extracted.pageCount,chars:extracted.chars,mode:extracted.mode,ocrDiagnostic};
+  const errors=[];let mx={items:[],complete:false,reason:"Extraction des missions non exécutée",zone:"",candidateCount:0};let vig=[];let identity=[];
+  try{identity=extractIdentityFacts(extracted.pages)||[];}catch(e){console.error("Identification ordonnance",e);errors.push(`Identification : ${e.message||"erreur indéterminée"}`);}
+  try{vig=extractVigilances(extracted.pages)||[];}catch(e){console.error("Échéances / contrôles",e);errors.push(`Échéances / contrôles : ${e.message||"erreur indéterminée"}`);}
+  try{mx=extractMissionItemsFromPages(extracted.pages)||mx;}catch(e){console.error("Extraction missions",e);mx={...mx,reason:e.message||"erreur indéterminée"};errors.push(`Missions : ${e.message||"erreur indéterminée"}`);}
+  const facts=[...identity,...vig.map(v=>({label:v.title,value:v.source,page:v.page,kind:'ordonnance',control:v.comment}))];
+  const warning=mx.complete?'':'Extraction des missions potentiellement incomplète : comparer impérativement la liste au dispositif reproduit dans l’onglet Mission.';
+  const controls=[...vig.map(v=>v.comment),...errors.map(x=>`Extraction partielle — ${x}`),warning,'Tout préremplissage doit être contrôlé sur le PDF original avant validation.'].filter(Boolean);
+  return {facts,controls,missions:(mx.items||[]).map(m=>m.text),missionSources:(mx.items||[]).map(m=>({text:m.text,page:m.page})),missionCheck:{complete:!!mx.complete,candidateCount:mx.candidateCount||0,extractedCount:(mx.items||[]).length,reason:mx.reason||'',errors},dispositifVerbatim:mx.zone||'',pages:extracted.pageCount,chars:extracted.chars,mode:extracted.mode,analysisErrors:errors};
 }
 async function prepareOrdonnanceFromPdf(file,onProgress){
   const extracted=await extractPdfDocument(file,onProgress);
   if(!extracted.text||extracted.chars<100)throw new Error("Aucun texte exploitable n’a pu être obtenu, même après tentative OCR.");
-  const a=buildAnalysis(extracted);
-  try{await dbPut({id:'ordonnance-text-'+state.dossier.id,kind:'texte-ordonnance',name:file.name+'.txt',type:'text/plain',blob:new Blob([extracted.text],{type:'text/plain'}),updatedAt:new Date().toISOString()});}catch(e){console.warn(e);}
-  return a;
+  // V2.5.4 : conserver la sortie RÉELLE PDF.js/OCR avant le moindre extracteur.
+  const diagnostic=extracted.pages.map(p=>({page:p.page,source:p.source,confidence:p.confidence,ocrConfidence:p.ocrConfidence??null,text:p.text||''}));
+  state.dossier.ocrDiagnostic=diagnostic;
+  state.dossier.analysis={mode:extracted.mode,pages:extracted.pageCount,chars:extracted.chars,readAt:new Date().toISOString(),stage:'lecture-terminée'};
+  try{persist("Lecture PDF/OCR terminée — diagnostic conservé");}catch(e){console.warn("Persistance diagnostic",e);}
+  try{
+    await dbPut({id:'ordonnance-text-'+state.dossier.id,kind:'texte-ordonnance',name:file.name+'.txt',type:'text/plain',blob:new Blob([extracted.text],{type:'text/plain'}),updatedAt:new Date().toISOString()});
+    await dbPut({id:'ordonnance-diagnostic-'+state.dossier.id,kind:'diagnostic-ordonnance',name:file.name+'.diagnostic.json',type:'application/json',blob:new Blob([JSON.stringify({version:'2.5.4',file:file.name,mode:extracted.mode,pages:diagnostic},null,2)],{type:'application/json'}),updatedAt:new Date().toISOString()});
+  }catch(e){console.warn("Sauvegarde diagnostic OCR",e);state.dossier.diagnosticStorageWarning=e.message||String(e);}
+  // Seulement maintenant : extraction métier, isolée composant par composant dans buildAnalysis().
+  const a=buildAnalysis(extracted);a.ocrDiagnostic=diagnostic;return a;
 }
 
 // IndexedDB : fichiers binaires locaux
@@ -406,10 +364,10 @@ analyseBtn.onclick=async()=>{
   state=blankState(); currentId=state.dossier.id; state.dossier.title=selectedFile.name.replace(/\.pdf$/i,""); state.dossier.ordonnanceName=selectedFile.name;
   try{
     const ordId='ordonnance-'+uid(); state.dossier.ordonnanceFileId=ordId; await dbPut({id:ordId,kind:"ordonnance",name:selectedFile.name,type:selectedFile.type,blob:selectedFile,updatedAt:new Date().toISOString()});
-    const a=await prepareOrdonnanceFromPdf(selectedFile,msg=>status(msg)); state.resume="";state.vigilances=(a.controls||[]).map(x=>`• ${x}`).join("\n");state.dossier.extractedFacts=a.facts||[];normalizeDossierMeta(state);const jf=(a.facts||[]).find(x=>x.label==="Juridiction");if(jf&&!state.dossier.reportMeta.juridiction)state.dossier.reportMeta.juridiction=jf.value;state.dossier.dispositifVerbatim=a.dispositifVerbatim||"";state.dossier.missionCheck=a.missionCheck||null;state.dossier.ocrDiagnostic=a.ocrDiagnostic||[];state.dossier.missionsValidated=false;state.dossier.missionsValidatedAt=null;
+    const a=await prepareOrdonnanceFromPdf(selectedFile,msg=>status(msg)); state.resume="";state.vigilances=(a.controls||[]).map(x=>`• ${x}`).join("\n");state.dossier.extractedFacts=a.facts||[];normalizeDossierMeta(state);const jf=(a.facts||[]).find(x=>x.label==="Juridiction");if(jf&&!state.dossier.reportMeta.juridiction)state.dossier.reportMeta.juridiction=jf.value;state.dossier.dispositifVerbatim=a.dispositifVerbatim||"";state.dossier.missionCheck=a.missionCheck||null;state.dossier.ocrDiagnostic=a.ocrDiagnostic||state.dossier.ocrDiagnostic||[];state.dossier.analysisErrors=a.analysisErrors||[];state.dossier.missionsValidated=false;state.dossier.missionsValidatedAt=null;
     state.missions=(a.missions.length?a.missions:["Missions de l’expert non extraites automatiquement — vérifier et reprendre le dispositif de l’ordonnance."]).map((text,i)=>({id:uid(),order:i+1,text,sourcePage:a.missionSources?.[i]?.page||null,response:"",status:"À vérifier",intervention:blankIntervention()}));
     state.dossier.analysis={mode:a.mode,pages:a.pages,chars:a.chars,analysedAt:new Date().toISOString()};persist("Lecture locale de l’ordonnance");openDossier();
-  }catch(e){console.error(e);state.resume="";state.dossier.extractedFacts=[];state.vigilances=`• Lecture automatique incomplète : ${e.message||"cause indéterminée"}\n• Vérifier manuellement les dates, délais, consignation, missions de l’expert et modalités du contradictoire.\n• Le PDF original demeure la référence.`;state.missions=[{id:uid(),order:1,text:"Missions de l’expert à reprendre manuellement depuis le dispositif de l’ordonnance.",response:"",status:"À vérifier",intervention:blankIntervention()}];persist("Import PDF sans extraction suffisante");openDossier();}
+  }catch(e){console.error(e);state.resume="";if(!Array.isArray(state.dossier.extractedFacts))state.dossier.extractedFacts=[];const previous=state.vigilances?state.vigilances+"\n":"";state.vigilances=previous+`• Lecture automatique incomplète : ${e.message||"cause indéterminée"}\n• Les données déjà extraites et le diagnostic PDF/OCR ont été conservés.\n• Le PDF original demeure la référence.`;if(!Array.isArray(state.missions)||!state.missions.length)state.missions=[{id:uid(),order:1,text:"Missions de l’expert à reprendre manuellement depuis le dispositif de l’ordonnance.",response:"",status:"À vérifier",intervention:blankIntervention()}];state.dossier.analysis={...(state.dossier.analysis||{}),error:e.message||"cause indéterminée",failedAt:new Date().toISOString()};persist("Import PDF partiel — données conservées");openDossier();}
   finally{analyseBtn.disabled=false;analyseBtn.textContent="Créer le dossier et analyser";}
 };
 function openDossierById(id){const s=loadDossier(id);if(!s)return status("Dossier local introuvable.");state=s;currentId=id;openDossier();}
@@ -691,21 +649,20 @@ async function renderPreview(){
 
 function renderSummary(){normalizeDossierMeta(state);const facts=state.dossier.extractedFacts||[];const meta=state.dossier.reportMeta;const el=$("factsGrid");if(el)el.innerHTML=facts.length?facts.map(f=>`<article class="fact-card"><span>${escapeHtml(f.label)}</span><strong>${escapeHtml(f.value)}</strong><small>${f.page?`Ordonnance p.${f.page} · `:''}À contrôler sur l’original</small></article>`).join(''):'<div class="empty-zone">Aucune information structurée extraite avec une fiabilité suffisante.</div>';const ctl=$("controlsList");if(ctl)ctl.innerHTML=(state.vigilances||'').split('\n').filter(Boolean).map(x=>`<li>${escapeHtml(x.replace(/^•\s*/,''))}</li>`).join('');for(const input of document.querySelectorAll('[data-report-meta]'))input.value=meta[input.dataset.reportMeta]||'';bindReportMeta();}
 function renderOcrDiagnostic(){
-  const box=$("ocrDiagnostic");if(!box)return;
-  const rows=state?.dossier?.ocrDiagnostic||[];
-  if(!rows.length){box.innerHTML='<div class="empty-zone">Aucun diagnostic OCR enregistré pour ce dossier.</div>';return;}
+  const box=$("ocrDiagnostic");if(!box)return;const rows=state?.dossier?.ocrDiagnostic||[];
+  if(!rows.length){box.innerHTML='<div class="empty-zone">Aucun diagnostic PDF/OCR enregistré pour ce dossier.</div>';return;}
   box.innerHTML=rows.map(p=>`<details class="ocr-page"><summary>Page ${p.page} · ${escapeHtml(p.source||'lecture')} · confiance ${escapeHtml(p.confidence||'indéterminée')}${p.ocrConfidence!=null?` (${Math.round(p.ocrConfidence)}%)`:''}</summary><pre>${escapeHtml(p.text||'')}</pre></details>`).join('');
 }
 function downloadOcrDiagnostic(){
-  const rows=state?.dossier?.ocrDiagnostic||[];if(!rows.length)return alert("Aucun texte OCR/PDF.js enregistré pour ce dossier.");
-  const header=`ASSISTANT EXPERT JUDICIAIRE V2.5.3\nDiagnostic brut de lecture — ${state.dossier.ordonnanceName||state.dossier.title||''}\nGénéré le ${new Date().toLocaleString('fr-FR')}\n\n`;
+  const rows=state?.dossier?.ocrDiagnostic||[];if(!rows.length)return alert("Aucun texte PDF/OCR enregistré pour ce dossier.");
+  const head=`ASSISTANT EXPERT JUDICIAIRE — Version moteur V2.5.4\n${state.dossier.ordonnanceName||state.dossier.title||''}\n\n`;
   const body=rows.map(p=>`===== PAGE ${p.page} | source=${p.source||''} | confiance=${p.confidence||''}${p.ocrConfidence!=null?` | OCR=${p.ocrConfidence}%`:''} =====\n${p.text||''}`).join('\n\n');
-  const blob=new Blob([header+body],{type:'text/plain;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${safeFileName(state.dossier.title||'ordonnance')}-diagnostic-ocr.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  const blob=new Blob([head+body],{type:'text/plain;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${safeFileName(state.dossier.title||'ordonnance')}-diagnostic-v254.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 function renderAll(){
   normalizeDossierMeta(state);renderSummary();renderOcrDiagnostic();
   if($("dispositifVerbatim")) $("dispositifVerbatim").textContent=state.dossier.dispositifVerbatim||"Dispositif non disponible : consulter le PDF original.";
-  if($("missionCheck")){const mc=state.dossier.missionCheck;$("missionCheck").textContent=!mc?"Aucun contrôle automatique disponible — comparer manuellement au dispositif.":`${mc.complete?"Contrôle automatique":"⚠ Extraction à contrôler"} : ${mc.extractedCount||0} chef(s) proposé(s)${mc.startPage?` · ordonnance p.${mc.startPage}${mc.endPage&&mc.endPage!==mc.startPage?"–"+mc.endPage:""}`:""} · ${mc.structuralCount||0} structuré(s) · ${mc.reconstructedCount||0} reconstruit(s) · ancre ${mc.anchorConfidence||"indéterminée"}. Validation par l’expert obligatoire.`;}
+  if($("missionCheck")){const mc=state.dossier.missionCheck;$("missionCheck").textContent=!mc?"Aucun contrôle automatique disponible — comparer manuellement au dispositif.":mc.complete?`Contrôle automatique : ${mc.extractedCount} élément(s) structuré(s) extrait(s). Validation par l’expert obligatoire.`:`⚠ Extraction potentiellement incomplète : ${mc.extractedCount} extrait(s) / ${mc.candidateCount||"nombre indéterminé"} élément(s) repéré(s). Comparaison au dispositif obligatoire.`;}
   if($("missionValidationState"))$("missionValidationState").textContent=state.dossier.missionsValidated?`✓ Liste validée par l’expert le ${fmtDateTime(state.dossier.missionsValidatedAt)}`:"⚠ Liste non validée : export Word bloqué."; 
   if($("resumeSource")){
     const a=state.dossier.analysis;
